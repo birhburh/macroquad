@@ -228,6 +228,12 @@ struct Context {
     quad_context: Box<dyn miniquad::RenderingBackend>,
 
     textures: crate::texture::TexturesContext,
+    needs_redraw: bool,
+} 
+
+pub fn request_redraw() {
+    let context = get_context();
+    context.needs_redraw = true;
 }
 
 #[derive(Clone)]
@@ -354,6 +360,7 @@ impl Context {
 
             quad_context: ctx,
             textures: crate::texture::TexturesContext::new(),
+            needs_redraw: true,
         }
     }
 
@@ -498,6 +505,7 @@ impl EventHandler for Stage {
         let _z = telemetry::ZoneGuard::new("Event::resize_event");
         get_context().screen_width = width;
         get_context().screen_height = height;
+        request_redraw();
     }
 
     fn raw_mouse_motion(&mut self, x: f32, y: f32) {
@@ -528,6 +536,7 @@ impl EventHandler for Stage {
                 .iter_mut()
                 .for_each(|arr| arr.push(MiniquadInputEvent::MouseMotion { x, y }));
         }
+        request_redraw();
     }
 
     fn mouse_wheel_event(&mut self, x: f32, y: f32) {
@@ -540,6 +549,7 @@ impl EventHandler for Stage {
             .input_events
             .iter_mut()
             .for_each(|arr| arr.push(MiniquadInputEvent::MouseWheel { x, y }));
+        request_redraw();
     }
 
     fn mouse_button_down_event(&mut self, btn: MouseButton, x: f32, y: f32) {
@@ -556,6 +566,7 @@ impl EventHandler for Stage {
         if !context.cursor_grabbed {
             context.mouse_position = Vec2::new(x, y);
         }
+        request_redraw();
     }
 
     fn mouse_button_up_event(&mut self, btn: MouseButton, x: f32, y: f32) {
@@ -572,6 +583,7 @@ impl EventHandler for Stage {
         if !context.cursor_grabbed {
             context.mouse_position = Vec2::new(x, y);
         }
+        request_redraw();
     }
 
     fn touch_event(&mut self, phase: TouchPhase, id: u64, x: f32, y: f32) {
@@ -604,6 +616,7 @@ impl EventHandler for Stage {
             .input_events
             .iter_mut()
             .for_each(|arr| arr.push(MiniquadInputEvent::Touch { phase, id, x, y }));
+        request_redraw();
     }
 
     fn char_event(&mut self, character: char, modifiers: KeyMods, repeat: bool) {
@@ -619,6 +632,7 @@ impl EventHandler for Stage {
                 repeat,
             })
         });
+        request_redraw();
     }
 
     fn key_down_event(&mut self, keycode: KeyCode, modifiers: KeyMods, repeat: bool) {
@@ -635,6 +649,7 @@ impl EventHandler for Stage {
                 repeat,
             })
         });
+        request_redraw();
     }
 
     fn key_up_event(&mut self, keycode: KeyCode, modifiers: KeyMods) {
@@ -646,9 +661,10 @@ impl EventHandler for Stage {
             .input_events
             .iter_mut()
             .for_each(|arr| arr.push(MiniquadInputEvent::KeyUp { keycode, modifiers }));
+        request_redraw();
     }
 
-    fn update(&mut self) {
+    fn update(&mut self, skipping: bool) -> bool {
         let _z = telemetry::ZoneGuard::new("Event::update");
 
         // Unless called every frame, cursor will not remain grabbed
@@ -659,6 +675,9 @@ impl EventHandler for Stage {
             // TODO: consider making it a part of miniquad?
             std::thread::yield_now();
         }
+        let redraw = get_context().needs_redraw;
+        get_context().needs_redraw = false;
+        redraw
     }
 
     fn draw(&mut self) {
@@ -728,11 +747,13 @@ impl EventHandler for Stage {
     fn window_restored_event(&mut self) {
         #[cfg(target_os = "android")]
         get_context().audio_context.resume();
+        request_redraw();
     }
 
     fn window_minimized_event(&mut self) {
         #[cfg(target_os = "android")]
         get_context().audio_context.pause();
+        request_redraw();
     }
 
     fn quit_requested_event(&mut self) {
@@ -741,6 +762,7 @@ impl EventHandler for Stage {
             miniquad::window::cancel_quit();
             context.quit_requested = true;
         }
+        request_redraw();
     }
 }
 
@@ -767,7 +789,7 @@ impl Window {
                 MAIN_FUTURE = Some(Box::pin(future));
             }
             unsafe { CONTEXT = Some(Context::new()) };
-            Box::new(Stage {})
+            Box::new(Stage { })
         });
     }
 }
